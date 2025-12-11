@@ -1,27 +1,45 @@
-const express = require("express");
-const app = express();
-const http = require("http").createServer(app);
-const io = require("socket.io")(http, {
-    cors: { origin: "*" }
+var app = require('express')();
+var http = require('http').createServer(app);
+var io = require('socket.io')(http, {
+    cors: { origin: "*" } // Cho phép kết nối từ mọi nguồn
 });
 
-// Khi user vào kết nối
-io.on("connection", (socket) => {
-    console.log("A user connected");
+io.on('connection', (socket) => {
+    console.log('User connected: ' + socket.id);
 
-    // Nhận dữ liệu vẽ và gửi cho người khác trong phòng
-    socket.on("canvas-data", (data) => {
-        socket.broadcast.emit("canvas-data", data); // send to all except sender
+    // 1. Xử lý tham gia phòng
+    // Client phải gửi sự kiện này đầu tiên khi vào trang
+    socket.on('join-room', (roomId) => {
+        socket.join(roomId);
+        console.log(`Socket ${socket.id} joined room: ${roomId}`);
     });
 
-    socket.on("disconnect", () => {
-        console.log("A user disconnected");
+    // 2. Xử lý vẽ (Chỉ gửi cho người trong cùng phòng)
+    socket.on('canvas-data', (data) => {
+        // data lúc này client gửi lên phải có dạng: { room_id: "1", image: "base64..." }
+        const { room_id, image } = data;
+        
+        // Gửi cho tất cả người trong phòng (trừ người gửi)
+        socket.to(room_id).emit('canvas-data', image);
+    });
+
+    // 3. Xử lý Xóa bảng (Clear)
+    socket.on('trigger-clear', (roomId) => {
+        socket.to(roomId).emit('trigger-clear');
+    });
+
+    // 4. Xử lý Undo (Đồng bộ)
+    socket.on('trigger-undo', (roomId) => {
+        socket.to(roomId).emit('trigger-undo');
+    });
+
+    // 5. Xử lý Redo (Đồng bộ)
+    socket.on('trigger-redo', (roomId) => {
+        socket.to(roomId).emit('trigger-redo');
     });
 });
 
-// PORT do Render cấp, không được dùng 5000 cố định
-const PORT = process.env.PORT || 10000;
-
-http.listen(PORT, () => {
-    console.log("Socket server running on port: " + PORT);
+var server_port = process.env.YOURPORT || process.env.PORT || 5000;
+http.listen(server_port, () => {
+    console.log("Server running on port: " + server_port);
 });
